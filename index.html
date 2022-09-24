@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>Craft Tree</title>
+  <meta name="description" content="Visualisation of Minecraft recipes">
+  <script type="module" crossorigin src="/assets/index.5a4444b2.js"></script>
+  <link rel="stylesheet" href="/assets/index.ca1ae6d6.css">
+</head>
+<body class="font-sans dark:text-white dark:bg-hex-121212">
+  <div id="app"></div>
+  <script>
+    (function () {
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      const setting = localStorage.getItem('color-schema') || 'auto'
+      if (setting === 'dark' || (prefersDark && setting !== 'light'))
+        document.documentElement.classList.toggle('dark', true)
+    })()
+  </script>
+  
+</body>
+</html>
