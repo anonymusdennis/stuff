@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>Bildkarussell</title>
+  <meta name="description" content="Eine moderne Webseite mit Bildkarussell">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="header">
+    <h1>Bildkarussell</h1>
+    <p>Entdecke wunderschöne Landschaften – per Klick, Tastatur oder Wischgeste.</p>
+  </header>
+
+  <main class="main">
+    <section class="carousel" aria-label="Bildkarussell" aria-roledescription="Karussell">
+      <div class="carousel__viewport">
+        <div class="carousel__track" id="carousel-track">
+          <figure class="carousel__slide is-active" data-index="0">
+            <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80" alt="Schneebedeckte Berggipfel bei Sonnenaufgang" loading="eager">
+            <figcaption class="carousel__caption">
+              <span class="carousel__tag">Berge</span>
+              <h2>Alpenpanorama</h2>
+              <p>Majestätische Gipfel im ersten Morgenlicht.</p>
+            </figcaption>
+          </figure>
+
+          <figure class="carousel__slide" data-index="1">
+            <img src="https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1200&q=80" alt="Nebel über einem grünen Tal" loading="lazy">
+            <figcaption class="carousel__caption">
+              <span class="carousel__tag">Natur</span>
+              <h2>Nebliges Tal</h2>
+              <p>Stille Landschaft, eingehüllt in sanften Dunst.</p>
+            </figcaption>
+          </figure>
+
+          <figure class="carousel__slide" data-index="2">
+            <img src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&q=80" alt="Sonnenstrahlen durch einen Wald" loading="lazy">
+            <figcaption class="carousel__caption">
+              <span class="carousel__tag">Wald</span>
+              <h2>Licht im Wald</h2>
+              <p>Goldene Strahlen brechen durch das Blätterdach.</p>
+            </figcaption>
+          </figure>
+
+          <figure class="carousel__slide" data-index="3">
+            <img src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&q=80" alt="Türkisfarbener Strand mit Palmen" loading="lazy">
+            <figcaption class="carousel__caption">
+              <span class="carousel__tag">Strand</span>
+              <h2>Paradiesischer Strand</h2>
+              <p>Kristallklares Wasser und endloser Horizont.</p>
+            </figcaption>
+          </figure>
+
+          <figure class="carousel__slide" data-index="4">
+            <img src="https://images.unsplash.com/photo-1418065460487-3e41a6c84dc5?w=1200&q=80" alt="Nordlichter über einem See" loading="lazy">
+            <figcaption class="carousel__caption">
+              <span class="carousel__tag">Nordlicht</span>
+              <h2>Arktische Nacht</h2>
+              <p>Tanzende Farben am nächtlichen Himmel.</p>
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <button class="carousel__btn carousel__btn--prev" id="btn-prev" type="button" aria-label="Vorheriges Bild">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <button class="carousel__btn carousel__btn--next" id="btn-next" type="button" aria-label="Nächstes Bild">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+
+      <div class="carousel__controls">
+        <div class="carousel__dots" id="carousel-dots" role="tablist" aria-label="Karussell-Navigation"></div>
+        <button class="carousel__play" id="btn-play" type="button" aria-label="Automatische Wiedergabe pausieren" aria-pressed="true">
+          <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
+          <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+      </div>
+
+      <div class="carousel__progress" aria-hidden="true">
+        <div class="carousel__progress-bar" id="progress-bar"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Bilder von <a href="https://unsplash.com" target="_blank" rel="noopener noreferrer">Unsplash</a></p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
