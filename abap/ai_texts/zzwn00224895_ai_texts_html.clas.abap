@@ -102,7 +102,7 @@ CLASS zzwn00224895_ai_texts_html IMPLEMENTATION.
       IF lv_ch CO gc_ascii.
         lv_out = lv_out && lv_ch.
       ELSE.
-        DATA(lv_code) = cl_abap_conv_in_ce=>uccpi( lv_ch ).
+        DATA(lv_code) = cl_abap_conv_out_ce=>uccpi( lv_ch ).
         lv_out = lv_out && '&#' && |{ lv_code }| && ';'.
       ENDIF.
       lv_pos = lv_pos + 1.
