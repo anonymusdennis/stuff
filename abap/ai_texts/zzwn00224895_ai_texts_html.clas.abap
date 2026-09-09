@@ -92,18 +92,33 @@ CLASS zzwn00224895_ai_texts_html IMPLEMENTATION.
       RETURN.
     ENDIF.
     "Non-ASCII present: encode those characters as numeric entities.
-    DATA: lv_out TYPE string,
-          lv_pos TYPE i,
-          lv_len TYPE i,
-          lv_ch  TYPE c LENGTH 1.
+    "lv_ch must be a STRING: && drops the trailing blank of a C field, so
+    "a C LENGTH 1 holding a blank would swallow every space of the text.
+    DATA: lv_out  TYPE string,
+          lv_ch   TYPE string,
+          lv_c1   TYPE c LENGTH 1,
+          lv_pos  TYPE i,
+          lv_len  TYPE i,
+          lv_code TYPE i,
+          lv_low  TYPE i.
     lv_len = strlen( rv_html ).
     WHILE lv_pos < lv_len.
-      lv_ch = rv_html+lv_pos(1).
+      lv_ch = substring( val = rv_html off = lv_pos len = 1 ).
       IF lv_ch CO gc_ascii.
         lv_out = lv_out && lv_ch.
       ELSE.
-        DATA(lv_code) = cl_abap_conv_out_ce=>uccpi( lv_ch ).
-        lv_out = lv_out && '&#' && |{ lv_code }| && ';'.
+        lv_c1 = lv_ch.
+        lv_code = cl_abap_conv_out_ce=>uccpi( lv_c1 ).
+        "Surrogate pair (e.g. emoji): combine into one code point.
+        IF lv_code >= 55296 AND lv_code <= 56319 AND lv_pos + 1 < lv_len.
+          lv_c1 = substring( val = rv_html off = lv_pos + 1 len = 1 ).
+          lv_low = cl_abap_conv_out_ce=>uccpi( lv_c1 ).
+          IF lv_low >= 56320 AND lv_low <= 57343.
+            lv_code = 65536 + ( lv_code - 55296 ) * 1024 + ( lv_low - 56320 ).
+            lv_pos = lv_pos + 1.
+          ENDIF.
+        ENDIF.
+        lv_out = lv_out && `&#` && |{ lv_code }| && `;`.
       ENDIF.
       lv_pos = lv_pos + 1.
     ENDWHILE.
@@ -143,7 +158,7 @@ CLASS zzwn00224895_ai_texts_html IMPLEMENTATION.
 
   METHOD len_html.
     DATA(lv_class) = COND string( WHEN iv_len > iv_limit THEN 'len bad' ELSE 'len' ).
-    rv_html = '<span class="' && lv_class && '" title="length / defined length (hard maximum '
+    rv_html = '<span class="' && lv_class && `" title="length / defined length (hard maximum `
       && |{ iv_hard }| && ')">' && |{ iv_len }/{ iv_limit }| && '</span>'.
   ENDMETHOD.
 
@@ -206,8 +221,10 @@ CLASS zzwn00224895_ai_texts_html IMPLEMENTATION.
       && '.txt{margin:8px 0;border:1px solid #45475a;border-radius:6px;overflow:hidden}'
       && '.th{background:#313244;padding:4px 10px;font-size:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}'
       && '.th b{color:#94e2d5}'
-      && '.orig{padding:4px 10px;display:flex;flex-wrap:wrap;gap:6px 14px;color:#a6adc8;font-size:12px}'
-      && '.orig .t{color:#cdd6f4}'
+      && '.orig{padding:6px 10px;display:flex;flex-wrap:wrap;gap:6px 14px;color:#a6adc8;font-size:12px}'
+      && '.orig .o{display:inline-flex;align-items:center;gap:6px}'
+      && '.orig .t{color:#f5f5fa;background:#11111b;border:1px solid #45475a;border-radius:4px;padding:2px 8px;'
+      && 'font:13px/1.4 Consolas,"Courier New",monospace;white-space:pre-wrap;word-break:break-word}'
       && '.len{color:#a6adc8;font-size:11px;margin-left:4px}'
       && '.len.bad{color:#f38ba8;font-weight:600}' ).
     add( '.sug{padding:6px 10px;border-top:1px dashed #45475a;display:flex;gap:10px;align-items:flex-start}'
@@ -215,9 +232,18 @@ CLASS zzwn00224895_ai_texts_html IMPLEMENTATION.
       && '.sug.D,.sug.R{opacity:.6}.sug.S{opacity:.45}.sug.T,.sug.C{background:#2b2440}.sug.F{background:#3a2028}'
       && '.sid{min-width:42px;color:#a6adc8;font-size:11px;padding-top:2px}'
       && '.body{flex:1;min-width:0}'
-      && '.new{font-size:13px;word-break:break-word}'
-      && '.new.del{text-decoration:line-through;color:#f38ba8}'
-      && '.was{font-size:11px;color:#a6adc8;margin-top:2px}'
+      && '.hd{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px}'
+      && '.new{display:block;margin:5px 0 2px;padding:7px 12px;border-radius:5px;background:#11111b;color:#ffffff;'
+      && 'font:15px/1.45 Consolas,"Courier New",monospace;white-space:pre-wrap;word-break:break-word;'
+      && 'border-left:4px solid #89b4fa;box-shadow:0 0 0 1px #45475a inset}'
+      && '.new.ADD{border-left-color:#89b4fa;background:#141c2b}'
+      && '.new.CHANGE{border-left-color:#f9e2af;background:#1e1a10}'
+      && '.new.del{border-left-color:#f38ba8;background:#2a1518;color:#f38ba8;text-decoration:line-through}'
+      && '.sug.X .new,.sug.A .new{border-left-color:#a6e3a1}'
+      && '.was{display:flex;gap:8px;align-items:baseline;font-size:12px;color:#a6adc8;margin:2px 0 2px 4px}'
+      && '.was .wl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;min-width:26px}'
+      && '.was .wt{font:12px/1.4 Consolas,"Courier New",monospace;white-space:pre-wrap;color:#bac2de;'
+      && 'background:#181825;padding:1px 8px;border-radius:4px;border:1px dashed #45475a}'
       && '.rat{font-size:11px;color:#a6adc8;font-style:italic;margin-top:2px}'
       && '.st{font-size:11px;margin-top:4px;color:#f9e2af}'
       && '.st.err{color:#f38ba8}.st.ok{color:#a6e3a1}'
@@ -267,7 +293,7 @@ CLASS zzwn00224895_ai_texts_html IMPLEMENTATION.
     LOOP AT is_view-langs INTO DATA(ls_lang).
       DATA(lv_cls) = COND string( WHEN ls_lang-visible = abap_true THEN 'lg on' ELSE 'lg off' ).
       add( '<a class="' && lv_cls && '" href="SAPEVENT:LANG?l=' && esc( ls_lang-iso ) && '" title="'
-        && esc( ls_lang-name ) && ' - ' && |{ ls_lang-count }| && ' texts">' && esc( ls_lang-iso ) && '</a>' ).
+        && esc( ls_lang-name ) && ` - ` && |{ ls_lang-count }| && ' texts">' && esc( ls_lang-iso ) && '</a>' ).
     ENDLOOP.
     add( ' &nbsp;' && link( iv_action = 'ORIG?m=A' iv_label = 'all' iv_class = 'mut' )
       && link( iv_action = 'ORIG?m=M' iv_label = 'master only' iv_class = 'mut' )
@@ -303,8 +329,8 @@ CLASS zzwn00224895_ai_texts_html IMPLEMENTATION.
           INTO TABLE lt_keys.
       ENDLOOP.
 
-      add( '<div class="grp"><div class="gh">' && esc( ls_obj-obj_type ) && ' ' && esc( ls_obj-obj_name ) ).
-      add( '<small>' && esc( ls_obj-description ) && '</small><small>master '
+      add( '<div class="grp"><div class="gh">' && esc( ls_obj-obj_type ) && ` ` && esc( ls_obj-obj_name ) ).
+      add( '<small>' && esc( ls_obj-description ) && `</small><small>master `
         && esc( zzwn00224895_ai_texts_api=>iso_of( ls_obj-master_lang ) ) && '</small>' ).
       IF ls_obj-devclass IS NOT INITIAL.
         add( '<small>' && esc( ls_obj-devclass ) && '</small>' ).
@@ -346,11 +372,11 @@ CLASS zzwn00224895_ai_texts_html IMPLEMENTATION.
     CLEAR gv_out.
 
     add( '<div class="th"><b>' && esc( zzwn00224895_ai_texts_api=>kind_label( iv_obj_type = is_object-obj_type iv_text_id = iv_text_id ) )
-      && '</b><span>' && esc( iv_text_id ) && ' ' && esc( iv_text_key ) && '</span>' ).
+      && '</b><span>' && esc( iv_text_id ) && ` ` && esc( iv_text_key ) && '</span>' ).
     IF iv_text_id = zzwn00224895_ai_texts_api=>gc_id_symbol AND is_object-obj_type = zzwn00224895_ai_texts_api=>gc_obj_prog.
-      add( '<span class="len">defined length ' && |{ lv_limit }| && ', max ' && |{ lv_max }| && '</span>' ).
+      add( '<span class="len">' && |defined length { lv_limit }, max { lv_max }| && '</span>' ).
     ELSE.
-      add( '<span class="len">max ' && |{ lv_max }| && '</span>' ).
+      add( '<span class="len">' && |max { lv_max }| && '</span>' ).
     ENDIF.
     add( '</div>' ).
 
@@ -363,13 +389,13 @@ CLASS zzwn00224895_ai_texts_html IMPLEMENTATION.
                  text_id = iv_text_id text_key = iv_text_key langu = ls_lang-langu.
       IF sy-subrc = 0.
         lv_filter = lv_filter && to_lower( ls_orig-text ) && ` `.
-        add( '<span><span class="lg">' && esc( ls_lang-iso ) && '</span> <span class="t">' && esc( ls_orig-text ) && '</span>' ).
+        add( '<span class="o"><span class="lg">' && esc( ls_lang-iso ) && '</span><span class="t">' && esc( ls_orig-text ) && '</span>' ).
         IF ls_orig-ddic_ref = abap_true.
           add( '<span class="len" title="Selection text taken from the Dictionary">DDIC</span>' ).
         ENDIF.
         add( len_html( iv_len = strlen( ls_orig-text ) iv_limit = lv_limit iv_hard = lv_max ) && '</span>' ).
       ELSE.
-        add( '<span><span class="lg off">' && esc( ls_lang-iso ) && '</span> <span class="len">not available</span></span>' ).
+        add( '<span class="o"><span class="lg off">' && esc( ls_lang-iso ) && '</span><span class="len">not available</span></span>' ).
       ENDIF.
     ENDLOOP.
     IF lv_visible = 0.
@@ -393,22 +419,26 @@ CLASS zzwn00224895_ai_texts_html IMPLEMENTATION.
     DATA(lv_limit) = COND i( WHEN is_sug-new_length > 0 THEN is_sug-new_length ELSE is_sug-max_len ).
 
     add( '<div class="sug ' && is_sug-status && '" id="s' && |{ is_sug-id }| && '"><div class="sid">#' && |{ is_sug-id }| && '</div>' ).
-    add( '<div class="body"><div><span class="lg on">' && esc( is_sug-iso ) && '</span> <span class="act ' && is_sug-action && '">'
-      && esc( is_sug-action ) && '</span> ' ).
-    IF is_sug-action = zzwn00224895_ai_texts_api=>gc_act_delete.
-      add( '<span class="new del">' && esc( is_sug-old_text ) && '</span>' ).
-    ELSE.
-      add( '<span class="new">' && esc( is_sug-new_text ) && '</span>'
-        && len_html( iv_len = strlen( is_sug-new_text ) iv_limit = lv_limit iv_hard = is_sug-max_len ) ).
+    add( '<div class="body"><div class="hd"><span class="lg on">' && esc( is_sug-iso ) && '</span>'
+      && '<span class="act ' && is_sug-action && '">' && esc( is_sug-action ) && '</span>' ).
+    IF is_sug-action <> zzwn00224895_ai_texts_api=>gc_act_delete.
+      add( len_html( iv_len = strlen( is_sug-new_text ) iv_limit = lv_limit iv_hard = is_sug-max_len ) ).
       IF is_sug-new_length > 0 AND is_sug-new_length <> is_sug-old_length AND is_sug-old_length > 0.
-        add( '<span class="len" title="The defined length of the text symbol is changed">defined length '
-          && |{ is_sug-old_length } &rarr; { is_sug-new_length }| && '</span>' ).
+        add( '<span class="len" title="The defined length of the text symbol is changed">'
+          && |defined length { is_sug-old_length } &rarr; { is_sug-new_length }| && '</span>' ).
       ENDIF.
     ENDIF.
     add( '</div>' ).
 
+    "The proposed text gets its own highlighted block so it stands out from
+    "the metadata; the original is shown right below it for comparison.
+    IF is_sug-action = zzwn00224895_ai_texts_api=>gc_act_delete.
+      add( '<div class="new del ' && is_sug-action && '" title="This text will be deleted">' && esc( is_sug-old_text ) && '</div>' ).
+    ELSE.
+      add( '<div class="new ' && is_sug-action && '" title="Proposed text">' && esc( is_sug-new_text ) && '</div>' ).
+    ENDIF.
     IF is_sug-action = zzwn00224895_ai_texts_api=>gc_act_change.
-      add( '<div class="was">was: ' && esc( is_sug-old_text ) && '</div>' ).
+      add( '<div class="was"><span class="wl">was</span><span class="wt">' && esc( is_sug-old_text ) && '</span></div>' ).
     ENDIF.
     IF is_sug-rationale IS NOT INITIAL.
       add( '<div class="rat">' && esc( is_sug-rationale ) && '</div>' ).
