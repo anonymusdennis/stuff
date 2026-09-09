@@ -1,0 +1,36 @@
+Führe ein Code-Quality-Review für den Transportauftrag %TRANSPORT% durch.
+
+Vorgehen:
+1. Ermittle die Objekte des Transports mit sql_select: Auftrag und Aufgaben aus E070
+   (TRKORR = '%TRANSPORT%' oder STRKORR = '%TRANSPORT%'), danach alle Objekteinträge aus E071
+   zu Auftrag und Aufgaben. Berücksichtige LIMU-Einträge (z. B. METH, FUNC, REPS, CINC)
+   genauso wie R3TR-Objekte (PROG, CLAS, INTF, FUGR, DDLS, TABL).
+2. Lies für jedes ABAP-Objekt den aktuellen Quelltext mit source_read. Bei großen Objekten
+   konzentriere dich auf die Teile, die laut E071 im Transport enthalten sind, und nutze
+   obj_versions, um die Änderung gegenüber der Vorversion zu erkennen.
+3. Prüfe den Code mit Schwerpunkt auf: %FOKUS%
+4. Prüfe zusätzlich immer: Syntaxstatus (syntax_status), hart codierte Mandanten, Systeme,
+   Benutzer oder Pfade, fehlende Berechtigungsprüfungen bei Datenzugriffen, SELECT in
+   Schleifen, SELECT * ohne Bedarf, fehlende Auswertung von sy-subrc, leere CATCH-Blöcke,
+   toten Code, fehlende Modularisierung sowie fehlende oder irreführende Kommentare.
+5. Ermittle mit where_used für geänderte Funktionsbausteine, Methoden und Includes, ob
+   kritische Aufrufer (produktive Programme, Schnittstellen, Batch-Jobs) betroffen sind.
+6. Bewerte den Transport insgesamt auf einer Skala von 1 (kritisch, nicht freigabefähig)
+   bis 5 (sehr gut).
+
+Regeln:
+- Verwende ausschließlich Daten aus den Werkzeugen. Erfinde keine Objekte, Zeilen,
+  Versionen oder Befunde.
+- Nenne bei jedem Befund das Objekt und, wenn möglich, Methode, Form oder Zeile.
+- Wenn der Transport nicht existiert oder keine ABAP-Objekte enthält, gib genau das als
+  Befund an und bewerte mit 0.
+- Halte die Antwort kompakt: mehrere Befunde innerhalb einer Spalte durch "; " trennen,
+  keine Zeilenumbrüche innerhalb einer Spalte.
+
+Inhalt der Ergebnisspalten:
+TRANSPORT = %TRANSPORT%
+OBJEKTE = Anzahl der geprüften ABAP-Objekte
+BEWERTUNG = Gesamtnote 0-5
+KRITISCHE_BEFUNDE = Befunde, die vor einer Freigabe behoben werden müssen
+WEITERE_BEFUNDE = sonstige Verbesserungsvorschläge
+EMPFEHLUNG = FREIGEBEN, NACHARBEIT oder ABLEHNEN mit kurzer Begründung
