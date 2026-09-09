@@ -637,19 +637,32 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    DATA: lv_object  TYPE e071-obj_name,
-          lv_korrnum TYPE trkorr.
-    lv_object = iv_object.
+    "Same types as the SAP workbench callers of RS_CORR_INSERT use: the
+    "object name as TRDIR-NAME (the complete lock key, CHAR 40), object
+    "class CHAR 4, flags CHAR 1 / CHAR 6.
+    DATA: lv_object   TYPE trdir-name,
+          lv_class    TYPE c LENGTH 4,
+          lv_devclass TYPE tadir-devclass,
+          lv_langu    TYPE sy-langu,
+          lv_in_req   TYPE e070-trkorr,
+          lv_global   TYPE c LENGTH 1 VALUE 'X',
+          lv_mode     TYPE c LENGTH 6 VALUE 'MODIFY',
+          lv_korrnum  TYPE e070-trkorr.
+    lv_object   = iv_object.
+    lv_class    = iv_object_class.
+    lv_devclass = iv_devclass.
+    lv_langu    = iv_master_lang.
+    lv_in_req   = gv_last_request.
 
     CALL FUNCTION 'RS_CORR_INSERT'
       EXPORTING
         object              = lv_object
-        object_class        = iv_object_class
-        devclass            = iv_devclass
-        master_language     = iv_master_lang
-        korrnum             = gv_last_request
-        global_lock         = abap_true
-        mode                = 'MODIFY'
+        object_class        = lv_class
+        devclass            = lv_devclass
+        master_language     = lv_langu
+        korrnum             = lv_in_req
+        global_lock         = lv_global
+        mode                = lv_mode
       IMPORTING
         korrnum             = lv_korrnum
       EXCEPTIONS
@@ -716,7 +729,12 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
         ENDCASE.
       CATCH cx_root INTO DATA(lx_error).
         ev_ok    = abap_false.
-        ev_error = |Write failed: { lx_error->get_text( ) }|.
+        "CX_SY_NO_HANDLER and similar wrappers carry the real cause in PREVIOUS.
+        DATA(lx_cause) = lx_error.
+        WHILE lx_cause->previous IS BOUND.
+          lx_cause = lx_cause->previous.
+        ENDWHILE.
+        ev_error = |Write failed: { cl_abap_classdescr=>get_class_name( lx_cause ) }: { lx_cause->get_text( ) }|.
     ENDTRY.
   ENDMETHOD.
 
@@ -724,13 +742,15 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
     DATA: lt_pool  TYPE tt_pool,
           ls_pool  TYPE textpool,
           lv_prog  TYPE syrepid,
+          lv_lock  TYPE trdir-name,   "exact type of ENQUEUE_ESRDIRE-NAME
           lv_entry TYPE string.
     ev_ok = abap_false.
     lv_prog = iv_obj_name.
+    lv_lock = lv_prog.
 
     CALL FUNCTION 'ENQUEUE_ESRDIRE'
       EXPORTING
-        name           = lv_prog
+        name           = lv_lock
       EXCEPTIONS
         foreign_lock   = 1
         system_failure = 2
@@ -751,7 +771,7 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
     IF lv_ok = abap_false.
       CALL FUNCTION 'DEQUEUE_ESRDIRE'
         EXPORTING
-          name = lv_prog.
+          name = lv_lock.
       RETURN.
     ENDIF.
 
@@ -827,7 +847,7 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
 
     CALL FUNCTION 'DEQUEUE_ESRDIRE'
       EXPORTING
-        name = lv_prog.
+        name = lv_lock.
 
     ev_ok = abap_true.
   ENDMETHOD.

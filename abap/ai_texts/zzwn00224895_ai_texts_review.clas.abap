@@ -254,6 +254,12 @@ CLASS zzwn00224895_ai_texts_review DEFINITION
     METHODS set_banner
       IMPORTING iv_text TYPE string
                 iv_kind TYPE char1.
+
+    "Text of the innermost exception (CX_SY_NO_HANDLER and other wrappers
+    "hide the real cause in PREVIOUS), prefixed with its class name.
+    CLASS-METHODS root_cause
+      IMPORTING ix_error       TYPE REF TO cx_root
+      RETURNING VALUE(rv_text) TYPE string.
 ENDCLASS.
 
 
@@ -284,6 +290,26 @@ CLASS zzwn00224895_ai_texts_review IMPLEMENTATION.
   METHOD set_banner.
     mv_status      = iv_text.
     mv_status_kind = iv_kind.
+  ENDMETHOD.
+
+  METHOD root_cause.
+    DATA(lx) = ix_error.
+    DATA lv_depth TYPE i.
+    WHILE lx IS BOUND AND lx->previous IS BOUND AND lv_depth < 10.
+      lx = lx->previous.
+      lv_depth = lv_depth + 1.
+    ENDWHILE.
+    IF lx IS NOT BOUND.
+      RETURN.
+    ENDIF.
+    TRY.
+        rv_text = |{ cl_abap_classdescr=>get_class_name( lx ) }: { lx->get_text( ) }|.
+      CATCH cx_root.
+        rv_text = lx->get_text( ).
+    ENDTRY.
+    IF lx <> ix_error.
+      rv_text = |{ rv_text } [wrapped in { ix_error->get_text( ) }]|.
+    ENDIF.
   ENDMETHOD.
 
   METHOD quote.
@@ -944,7 +970,7 @@ CLASS zzwn00224895_ai_texts_review IMPLEMENTATION.
             "unknown action: ignore
         ENDCASE.
       CATCH cx_root INTO DATA(lx_error).
-        set_banner( iv_text = |Action { ls_req-action } failed: { lx_error->get_text( ) }| iv_kind = 'E' ).
+        set_banner( iv_text = |Action { ls_req-action } failed: { root_cause( lx_error ) }| iv_kind = 'E' ).
     ENDTRY.
 
     IF is_open( ) = abap_true.
@@ -1217,14 +1243,22 @@ CLASS zzwn00224895_ai_texts_review IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD apply_group.
-    zzwn00224895_ai_texts_api=>write_texts(
-      EXPORTING iv_obj_type = cs_group-obj_type
-                iv_obj_name = cs_group-obj_name
-                iv_langu    = cs_group-langu
-                it_changes  = cs_group-changes
-      IMPORTING ev_ok       = DATA(lv_ok)
-                ev_error    = DATA(lv_error)
-                ev_request  = DATA(lv_request) ).
+    DATA: lv_ok      TYPE abap_bool,
+          lv_error   TYPE string,
+          lv_request TYPE trkorr.
+    TRY.
+        zzwn00224895_ai_texts_api=>write_texts(
+          EXPORTING iv_obj_type = cs_group-obj_type
+                    iv_obj_name = cs_group-obj_name
+                    iv_langu    = cs_group-langu
+                    it_changes  = cs_group-changes
+          IMPORTING ev_ok       = lv_ok
+                    ev_error    = lv_error
+                    ev_request  = lv_request ).
+      CATCH cx_root INTO DATA(lx_write).
+        lv_ok    = abap_false.
+        lv_error = |Write failed: { root_cause( lx_write ) }|.
+    ENDTRY.
 
     LOOP AT cs_group-ids INTO DATA(lv_id).
       READ TABLE mt_suggestions ASSIGNING FIELD-SYMBOL(<ls_sug>) WITH KEY id = lv_id.
@@ -1243,8 +1277,14 @@ CLASS zzwn00224895_ai_texts_review IMPLEMENTATION.
     ENDLOOP.
 
     IF lv_ok = abap_true.
-      "Refresh the originals so the popup shows the new current texts.
-      load_object( EXPORTING iv_obj_type = cs_group-obj_type iv_obj_name = cs_group-obj_name iv_force = abap_true ).
+      "Refresh the originals so the popup shows the new current texts. The
+      "texts are already written; a reload problem must not undo that.
+      TRY.
+          load_object( EXPORTING iv_obj_type = cs_group-obj_type iv_obj_name = cs_group-obj_name iv_force = abap_true ).
+        CATCH cx_root INTO DATA(lx_reload).
+          set_banner( iv_text = |Texts written, but reloading { cs_group-obj_type } { cs_group-obj_name } failed: |
+                              && root_cause( lx_reload ) iv_kind = 'E' ).
+      ENDTRY.
     ENDIF.
   ENDMETHOD.
 
