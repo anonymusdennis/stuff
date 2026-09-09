@@ -1,0 +1,5 @@
+# Promptliste: eine Zeile = ein Prompt. Leere Zeilen und Zeilen mit # am Anfang werden ignoriert.
+# Ergebnisspalten (Tabellenformat): TRANSPORT\tOBJEKTE\tBEWERTUNG\tKRITISCHE_BEFUNDE\tWEITERE_BEFUNDE\tEMPFEHLUNG, Spalten = 6
+Führe ein Code-Quality-Review für den Transportauftrag DEVK900123 durch. Ermittle die Objekte über E070/E071, lies den Quelltext und bewerte Performance, Sicherheit und Clean-ABAP-Konventionen mit einer Note von 1 bis 5.
+Führe ein Code-Quality-Review für den Transportauftrag DEVK900456 durch. Ermittle die Objekte über E070/E071, lies den Quelltext und bewerte Performance, Sicherheit und Clean-ABAP-Konventionen mit einer Note von 1 bis 5.
+Prüfe, ob der Transportauftrag DEVK900789 Änderungen an produktiv genutzten Funktionsbausteinen enthält, und nenne alle betroffenen Aufrufer (where_used).
