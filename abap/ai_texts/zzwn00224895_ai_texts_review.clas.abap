@@ -148,7 +148,10 @@ CLASS zzwn00224895_ai_texts_review DEFINITION
              ids      TYPE STANDARD TABLE OF i WITH DEFAULT KEY,
              changes  TYPE zzwn00224895_ai_texts_api=>tt_change,
            END OF ty_group.
-    TYPES tt_group TYPE SORTED TABLE OF ty_group WITH UNIQUE KEY obj_type obj_name langu.
+    "Standard table on purpose: rows are passed as CHANGING parameter to
+    "apply_group; rows of a sorted/hashed table are write-protected in their
+    "key fields and the call fails with CX_SY_DYN_CALL_ILLEGAL_TYPE.
+    TYPES tt_group TYPE STANDARD TABLE OF ty_group WITH KEY obj_type obj_name langu.
 
     CONSTANTS:
       gc_caption     TYPE c LENGTH 20 VALUE 'AI text review',
@@ -1128,10 +1131,10 @@ CLASS zzwn00224895_ai_texts_review IMPLEMENTATION.
       ENDIF.
 
       READ TABLE lt_groups ASSIGNING FIELD-SYMBOL(<ls_grp>)
-        WITH TABLE KEY obj_type = <ls_sug>-obj_type obj_name = <ls_sug>-obj_name langu = <ls_sug>-langu.
+        WITH KEY obj_type = <ls_sug>-obj_type obj_name = <ls_sug>-obj_name langu = <ls_sug>-langu.
       IF sy-subrc <> 0.
-        INSERT VALUE ty_group( obj_type = <ls_sug>-obj_type obj_name = <ls_sug>-obj_name langu = <ls_sug>-langu )
-          INTO TABLE lt_groups ASSIGNING <ls_grp>.
+        APPEND VALUE ty_group( obj_type = <ls_sug>-obj_type obj_name = <ls_sug>-obj_name langu = <ls_sug>-langu )
+          TO lt_groups ASSIGNING <ls_grp>.
       ENDIF.
 
       READ TABLE <ls_grp>-changes ASSIGNING FIELD-SYMBOL(<ls_chg>)
@@ -1177,10 +1180,10 @@ CLASS zzwn00224895_ai_texts_review IMPLEMENTATION.
             IMPORTING es_text = DATA(ls_master) ev_found = DATA(lv_found) ).
           IF lv_found = abap_true AND ls_master-length < <ls_sug>-new_length.
             READ TABLE lt_groups ASSIGNING FIELD-SYMBOL(<ls_mgrp>)
-              WITH TABLE KEY obj_type = <ls_sug>-obj_type obj_name = <ls_sug>-obj_name langu = ls_obj-master_lang.
+              WITH KEY obj_type = <ls_sug>-obj_type obj_name = <ls_sug>-obj_name langu = ls_obj-master_lang.
             IF sy-subrc <> 0.
-              INSERT VALUE ty_group( obj_type = <ls_sug>-obj_type obj_name = <ls_sug>-obj_name langu = ls_obj-master_lang )
-                INTO TABLE lt_groups ASSIGNING <ls_mgrp>.
+              APPEND VALUE ty_group( obj_type = <ls_sug>-obj_type obj_name = <ls_sug>-obj_name langu = ls_obj-master_lang )
+                TO lt_groups ASSIGNING <ls_mgrp>.
             ENDIF.
             READ TABLE <ls_mgrp>-changes TRANSPORTING NO FIELDS
               WITH KEY text_id = <ls_sug>-text_id text_key = <ls_sug>-text_key.
