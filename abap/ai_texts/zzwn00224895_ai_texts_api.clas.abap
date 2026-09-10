@@ -765,7 +765,6 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
     ls_ko200-objfunc    = 'K'.
     ls_ko200-devclass   = iv_devclass.
     ls_ko200-masterlang = iv_master_lang.
-    ls_ko200-srcsystem  = sy-sysid.
     ls_ko200-author     = sy-uname.
     APPEND ls_ko200 TO lt_ko200.
 
