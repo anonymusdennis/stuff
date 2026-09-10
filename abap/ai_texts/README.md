@@ -9,7 +9,7 @@ assistant keeps working ("coop mode"). Nothing is written without a click.
 
 | Object | Type | Purpose |
 |---|---|---|
-| `ZZWN00224895_AI_TEXTS_API` | class | Backend: read/write text pools (`READ/INSERT TEXTPOOL`) and T100 in any installed language, language resolution (ISO ↔ SAP key), length limits, `ENQUEUE_ESRDIRE`, `RS_CORR_INSERT`. Owns the shared types. |
+| `ZZWN00224895_AI_TEXTS_API` | class | Backend: read/write text pools (`READ/INSERT TEXTPOOL`) and T100 in any installed language, language resolution (ISO ↔ SAP key), length limits, `ENQUEUE_ESRDIRE`, transport popup (`TR_REQUEST_CHOICE` + `TR_OBJECTS_INSERT`). Owns the shared types. |
 | `ZZWN00224895_AI_TEXTS_HTML` | class | Renders the review page (dark theme, per-row buttons, inline forms, language toggles, filter). |
 | `ZZWN00224895_AI_TEXTS_REVIEW` | class | Singleton review model + popup controller (`CL_GUI_DIALOGBOX_CONTAINER` + `CL_GUI_HTML_VIEWER`), SAPEVENT handling, decisions, apply, AI feedback queue. |
 | `ZZWN00224895_AI_TOOL_TEXTS` | class | Implements `ZZWN00224895_AI_IF_TOOL`; sub-tools `text_list`, `text_suggest`, `text_review_status`. Discovered automatically by the registry. |
@@ -52,9 +52,10 @@ model ── text_review_status ─▶ TOOL ──▶ decisions + open requests
 * Grouped per object and language: one `READ TEXTPOOL` → patch → `INSERT TEXTPOOL ... STATE 'A'`
   (or `DELETE TEXTPOOL` when the language becomes empty). Messages: `MODIFY t100` / `DELETE FROM t100`
   plus `T100U`.
-* Program lock via `ENQUEUE_ESRDIRE`; transport recording via `RS_CORR_INSERT`
-  (`REPT` for text pools, `MESS` with `MSAG` fallback for messages) whenever the package is not local.
-  The chosen request is reused for subsequent writes.
+* Program lock via `ENQUEUE_ESRDIRE`. When the object's package is not local, Apply
+  opens the standard CTS request popup (`TR_REQUEST_CHOICE`) and records
+  `LIMU REPT` (program texts) or `LIMU MESS` / `R3TR MSAG` (messages) with
+  `TR_OBJECTS_INSERT`. The chosen request is reused for later writes in the same session.
 * Selection texts keep their 8-character flag prefix; a Dictionary reference (`D`) is dropped
   when an own text is supplied.
 * Text symbols: a longer defined length (`new_length`) is written to the target language row and,

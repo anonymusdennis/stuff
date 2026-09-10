@@ -13,9 +13,10 @@ CLASS zzwn00224895_ai_texts_api DEFINITION
   " on this one and can be activated in order API -> HTML -> REVIEW -> TOOL.
   "
   " Writes: lock the program (ESRDIRE), record the object on a transport
-  " request when its package is transportable (RS_CORR_INSERT), replace
-  " the text pool of exactly one language (READ -> patch -> INSERT
-  " TEXTPOOL) and never exceed the hard length limit of the text kind.
+  " request when its package is transportable (TR_REQUEST_CHOICE +
+  " TR_OBJECTS_INSERT, LIMU REPT / LIMU MESS), replace the text pool of
+  " exactly one language (READ -> patch -> INSERT TEXTPOOL) and never
+  " exceed the hard length limit of the text kind.
   "===================================================================
   PUBLIC SECTION.
     CONSTANTS:
@@ -259,13 +260,22 @@ CLASS zzwn00224895_ai_texts_api DEFINITION
                 ev_request  TYPE trkorr.
 
     CLASS-METHODS record_transport
-      IMPORTING iv_object_class TYPE trobjtype
+      IMPORTING iv_pgmid        TYPE pgmid DEFAULT 'LIMU'
+                iv_object_class TYPE trobjtype
                 iv_object       TYPE csequence
                 iv_devclass     TYPE devclass
                 iv_master_lang  TYPE sy-langu
       EXPORTING ev_ok           TYPE abap_bool
                 ev_error        TYPE string
                 ev_request      TYPE trkorr.
+
+    "Opens the standard transport request popup (TR_REQUEST_CHOICE) when
+    "the change is not local. The chosen request is reused for later writes.
+    CLASS-METHODS choose_request
+      IMPORTING iv_devclass      TYPE devclass
+      EXPORTING ev_ok            TYPE abap_bool
+                ev_error         TYPE string
+                ev_request       TYPE trkorr.
 
     CLASS-METHODS pool_entry_text
       IMPORTING is_pool        TYPE textpool
@@ -627,65 +637,175 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
     ENDIF.
   ENDMETHOD.
 
+  METHOD choose_request.
+    ev_ok = abap_true.
+    CLEAR: ev_error, ev_request.
+
+    "Local objects ($-packages) and objects without a directory package
+    "are not recorded.
+    IF iv_devclass IS INITIAL OR iv_devclass(1) = '$'.
+      RETURN.
+    ENDIF.
+
+    IF gv_last_request IS NOT INITIAL.
+      ev_request = gv_last_request.
+      RETURN.
+    ENDIF.
+
+    DATA: lv_request   TYPE e070-trkorr,
+          lt_e071      TYPE STANDARD TABLE OF e071,
+          lv_title     TYPE e07t-as4text,
+          lv_start_col TYPE i VALUE 5,
+          lv_start_row TYPE i VALUE 5.
+
+    lv_title = 'AI text review: choose a workbench request'.
+
+    "TR_REQUEST_CHOICE opens the standard CTS popup (own / create / F4).
+    "it_e071 stays empty so the dialog is only a picker; the objects
+    "themselves are added afterwards with TR_OBJECTS_INSERT.
+    CALL FUNCTION 'TR_REQUEST_CHOICE'
+      EXPORTING
+        iv_suppress_dialog   = space
+        iv_request_types     = 'K'
+        iv_cli_dep           = space
+        iv_request           = lv_request
+        iv_title             = lv_title
+        iv_start_column      = lv_start_col
+        iv_start_row         = lv_start_row
+        iv_with_error_log    = space
+      IMPORTING
+        ev_request           = lv_request
+      TABLES
+        it_e071              = lt_e071
+      EXCEPTIONS
+        invalid_request      = 1
+        invalid_request_type = 2
+        user_not_owner       = 3
+        no_objects_appended  = 4
+        enqueue_error        = 5
+        cancelled_by_user    = 6
+        recursive_call       = 7
+        OTHERS               = 8.
+    CASE sy-subrc.
+      WHEN 0.
+        ev_request      = lv_request.
+        gv_last_request = lv_request.
+      WHEN 4.
+        "Empty object list: some releases raise NO_OBJECTS_APPENDED even
+        "when the user did pick a request. Keep the request if one came back.
+        IF lv_request IS NOT INITIAL.
+          ev_request      = lv_request.
+          gv_last_request = lv_request.
+        ELSE.
+          ev_ok    = abap_false.
+          ev_error = 'No transport request was selected; nothing written.'.
+        ENDIF.
+      WHEN 6.
+        ev_ok    = abap_false.
+        ev_error = 'Transport request selection was cancelled; nothing written.'.
+      WHEN OTHERS.
+        ev_ok    = abap_false.
+        ev_error = message_text( iv_subrc = sy-subrc
+                                 iv_default = 'Transport request selection failed' ).
+    ENDCASE.
+
+    IF ev_ok = abap_true AND ev_request IS INITIAL.
+      ev_ok    = abap_false.
+      ev_error = 'No transport request was selected; nothing written.'.
+    ENDIF.
+  ENDMETHOD.
+
   METHOD record_transport.
     ev_ok = abap_true.
     CLEAR: ev_error, ev_request.
 
     "Local objects ($-packages) and objects without directory entry are
-    "not recorded; RS_CORR_INSERT would only raise dialogs for them.
+    "not recorded.
     IF iv_devclass IS INITIAL OR iv_devclass(1) = '$'.
       RETURN.
     ENDIF.
 
-    "Same types as the SAP workbench callers of RS_CORR_INSERT use: the
-    "object name as TRDIR-NAME (the complete lock key, CHAR 40), object
-    "class CHAR 4, flags CHAR 1 / CHAR 6.
-    DATA: lv_object   TYPE trdir-name,
-          lv_class    TYPE c LENGTH 4,
-          lv_devclass TYPE tadir-devclass,
-          lv_langu    TYPE sy-langu,
-          lv_in_req   TYPE e070-trkorr,
-          lv_global   TYPE c LENGTH 1 VALUE 'X',
-          lv_mode     TYPE c LENGTH 6 VALUE 'MODIFY',
-          lv_korrnum  TYPE e070-trkorr.
-    lv_object   = iv_object.
-    lv_class    = iv_object_class.
-    lv_devclass = iv_devclass.
-    lv_langu    = iv_master_lang.
-    lv_in_req   = gv_last_request.
+    choose_request(
+      EXPORTING iv_devclass = iv_devclass
+      IMPORTING ev_ok       = ev_ok
+                ev_error    = ev_error
+                ev_request  = ev_request ).
+    IF ev_ok = abap_false.
+      RETURN.
+    ENDIF.
 
-    CALL FUNCTION 'RS_CORR_INSERT'
+    "CTS object list (E071 / KO200): LIMU REPT = program texts,
+    "LIMU MESS = one T100 message, R3TR MSAG = whole message class.
+    "RS_CORR_INSERT with workbench class REPT/MESS is rejected with
+    "'Syntax fuer den Objektnamen ist nicht moeglich' (TK313).
+    DATA: lt_ko200    TYPE STANDARD TABLE OF ko200,
+          ls_ko200    TYPE ko200,
+          lt_e071k    TYPE STANDARD TABLE OF e071k,
+          lv_order    TYPE e070-trkorr,
+          lv_task     TYPE e070-trkorr,
+          lv_pgmid    TYPE e071-pgmid,
+          lv_object   TYPE e071-object,
+          lv_obj_name TYPE e071-obj_name.
+
+    lv_pgmid    = iv_pgmid.
+    IF lv_pgmid IS INITIAL.
+      lv_pgmid = 'LIMU'.
+    ENDIF.
+    lv_object   = iv_object_class.
+    lv_obj_name = iv_object.
+    lv_order    = ev_request.
+    IF lv_order IS INITIAL.
+      lv_order = gv_last_request.
+    ENDIF.
+
+    CLEAR ls_ko200.
+    ls_ko200-pgmid      = lv_pgmid.
+    ls_ko200-object     = lv_object.
+    ls_ko200-obj_name   = lv_obj_name.
+    ls_ko200-objfunc    = 'K'.
+    ls_ko200-devclass   = iv_devclass.
+    ls_ko200-masterlang = iv_master_lang.
+    ls_ko200-srcsystem  = sy-sysid.
+    ls_ko200-author     = sy-uname.
+    APPEND ls_ko200 TO lt_ko200.
+
+    CALL FUNCTION 'TR_OBJECTS_INSERT'
       EXPORTING
-        object              = lv_object
-        object_class        = lv_class
-        devclass            = lv_devclass
-        master_language     = lv_langu
-        korrnum             = lv_in_req
-        global_lock         = lv_global
-        mode                = lv_mode
+        wi_order         = lv_order
+        iv_no_show_error = space
       IMPORTING
-        korrnum             = lv_korrnum
+        we_order         = lv_order
+        we_task          = lv_task
+      TABLES
+        wt_ko200         = lt_ko200
+        wt_e071k         = lt_e071k
       EXCEPTIONS
-        cancelled           = 1
-        permission_failure  = 2
-        unknown_objectclass = 3
-        OTHERS              = 4.
+        cancel_edit_error = 1
+        show_error        = 2
+        OTHERS            = 3.
     CASE sy-subrc.
       WHEN 0.
-        ev_request      = lv_korrnum.
-        gv_last_request = lv_korrnum.
+        IF lv_task IS NOT INITIAL.
+          ev_request      = lv_task.
+        ELSEIF lv_order IS NOT INITIAL.
+          ev_request      = lv_order.
+        ENDIF.
+        IF ev_request IS NOT INITIAL.
+          gv_last_request = ev_request.
+        ENDIF.
       WHEN 1.
         ev_ok    = abap_false.
         ev_error = 'Transport request selection was cancelled; nothing written.'.
-      WHEN 2.
-        ev_ok    = abap_false.
-        ev_error = message_text( iv_subrc = sy-subrc iv_default = 'No permission to change the object' ).
-      WHEN 3.
-        ev_ok    = abap_false.
-        ev_error = |Transport recording failed: object class { iv_object_class } unknown.|.
       WHEN OTHERS.
-        ev_ok    = abap_false.
-        ev_error = message_text( iv_subrc = sy-subrc iv_default = 'Transport recording failed' ).
+        "Object already on the request / locked by this user: still ok.
+        IF sy-msgid = 'TK' AND ( sy-msgno = '133' OR sy-msgno = '168' OR sy-msgno = '320' ).
+          ev_request = COND #( WHEN lv_order IS NOT INITIAL THEN lv_order ELSE gv_last_request ).
+          ev_ok      = abap_true.
+        ELSE.
+          ev_ok    = abap_false.
+          ev_error = message_text( iv_subrc = sy-subrc
+                                   iv_default = |Could not add { lv_pgmid } { lv_object } { lv_obj_name } to a transport request| ).
+        ENDIF.
     ENDCASE.
   ENDMETHOD.
 
@@ -875,9 +995,10 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
         IMPORTING ev_ok           = DATA(lv_ok)
                   ev_error        = ev_error
                   ev_request      = ev_request ).
-      IF lv_ok = abap_false AND ev_error CS 'unknown'.
+      IF lv_ok = abap_false.
         record_transport(
-          EXPORTING iv_object_class = 'MSAG'
+          EXPORTING iv_pgmid        = 'R3TR'
+                    iv_object_class = 'MSAG'
                     iv_object       = lv_arbgb
                     iv_devclass     = is_object-devclass
                     iv_master_lang  = is_object-master_lang
