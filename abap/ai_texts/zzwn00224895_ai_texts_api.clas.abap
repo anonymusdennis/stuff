@@ -652,31 +652,25 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    DATA: lv_request   TYPE e070-trkorr,
-          lt_e071      TYPE STANDARD TABLE OF e071,
-          lv_title     TYPE e07t-as4text,
-          lv_start_col TYPE i VALUE 5,
-          lv_start_row TYPE i VALUE 5.
+    DATA: ls_req       TYPE trwbo_request_header,
+          lv_request   TYPE e070-trkorr,
+          lv_title     TYPE c LENGTH 60,
+          lv_start_col TYPE sy-cucol VALUE 5,
+          lv_start_row TYPE sy-curow VALUE 5.
 
     lv_title = 'AI text review: choose a workbench request'.
 
-    "TR_REQUEST_CHOICE opens the standard CTS popup (own / create / F4).
-    "it_e071 stays empty so the dialog is only a picker; the objects
-    "themselves are added afterwards with TR_OBJECTS_INSERT.
+    "TR_REQUEST_CHOICE: export is ES_REQUEST (TRWBO_REQUEST_HEADER),
+    "not EV_REQUEST. Object tables are optional IMPORTING, not TABLES.
     CALL FUNCTION 'TR_REQUEST_CHOICE'
       EXPORTING
-        iv_suppress_dialog   = space
-        iv_request_types     = 'K'
-        iv_cli_dep           = space
-        iv_request           = lv_request
-        iv_title             = lv_title
-        iv_start_column      = lv_start_col
-        iv_start_row         = lv_start_row
-        iv_with_error_log    = space
+        iv_request_types   = 'K'
+        iv_title           = lv_title
+        iv_start_column    = lv_start_col
+        iv_start_row       = lv_start_row
+        iv_with_error_log  = space
       IMPORTING
-        ev_request           = lv_request
-      TABLES
-        it_e071              = lt_e071
+        es_request         = ls_req
       EXCEPTIONS
         invalid_request      = 1
         invalid_request_type = 2
@@ -686,6 +680,7 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
         cancelled_by_user    = 6
         recursive_call       = 7
         OTHERS               = 8.
+    lv_request = ls_req-trkorr.
     CASE sy-subrc.
       WHEN 0.
         ev_request      = lv_request.
@@ -770,18 +765,17 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
 
     CALL FUNCTION 'TR_OBJECTS_INSERT'
       EXPORTING
-        wi_order         = lv_order
-        iv_no_show_error = space
+        wi_order = lv_order
       IMPORTING
-        we_order         = lv_order
-        we_task          = lv_task
+        we_order = lv_order
+        we_task  = lv_task
       TABLES
-        wt_ko200         = lt_ko200
-        wt_e071k         = lt_e071k
+        wt_ko200 = lt_ko200
+        wt_e071k = lt_e071k
       EXCEPTIONS
-        cancel_edit_error = 1
-        show_error        = 2
-        OTHERS            = 3.
+        cancel_edit_other_error = 1
+        show_only_other_error   = 2
+        OTHERS                  = 3.
     CASE sy-subrc.
       WHEN 0.
         IF lv_task IS NOT INITIAL.
