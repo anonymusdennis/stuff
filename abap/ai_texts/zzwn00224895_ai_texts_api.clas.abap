@@ -13,10 +13,11 @@ CLASS zzwn00224895_ai_texts_api DEFINITION
   " on this one and can be activated in order API -> HTML -> REVIEW -> TOOL.
   "
   " Writes: lock the program (ESRDIRE), record the object on a transport
-  " request when its package is transportable (TR_REQUEST_CHOICE +
-  " TR_OBJECTS_INSERT, LIMU REPT / LIMU MESS), replace the text pool of
-  " exactly one language (READ -> patch -> INSERT TEXTPOOL) and never
-  " exceed the hard length limit of the text kind.
+  " request when its package is transportable (TR_OBJECTS_CHECK then
+  " TR_OBJECTS_INSERT; the insert opens the request popup if none is
+  " known yet), replace the text pool of exactly one language
+  " (READ -> patch -> INSERT TEXTPOOL) and never exceed the hard length
+  " limit of the text kind.
   "===================================================================
   PUBLIC SECTION.
     CONSTANTS:
@@ -268,14 +269,6 @@ CLASS zzwn00224895_ai_texts_api DEFINITION
       EXPORTING ev_ok           TYPE abap_bool
                 ev_error        TYPE string
                 ev_request      TYPE trkorr.
-
-    "Opens the standard transport request popup (TR_REQUEST_CHOICE) when
-    "the change is not local. The chosen request is reused for later writes.
-    CLASS-METHODS choose_request
-      IMPORTING iv_devclass      TYPE devclass
-      EXPORTING ev_ok            TYPE abap_bool
-                ev_error         TYPE string
-                ev_request       TYPE trkorr.
 
     CLASS-METHODS pool_entry_text
       IMPORTING is_pool        TYPE textpool
@@ -637,79 +630,6 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
     ENDIF.
   ENDMETHOD.
 
-  METHOD choose_request.
-    ev_ok = abap_true.
-    CLEAR: ev_error, ev_request.
-
-    "Local objects ($-packages) and objects without a directory package
-    "are not recorded.
-    IF iv_devclass IS INITIAL OR iv_devclass(1) = '$'.
-      RETURN.
-    ENDIF.
-
-    IF gv_last_request IS NOT INITIAL.
-      ev_request = gv_last_request.
-      RETURN.
-    ENDIF.
-
-    DATA: ls_req       TYPE trwbo_request_header,
-          lv_request   TYPE e070-trkorr,
-          lv_title     TYPE c LENGTH 60,
-          lv_start_col TYPE sy-cucol VALUE 5,
-          lv_start_row TYPE sy-curow VALUE 5.
-
-    lv_title = 'AI text review: choose a workbench request'.
-
-    "TR_REQUEST_CHOICE: export is ES_REQUEST (TRWBO_REQUEST_HEADER),
-    "not EV_REQUEST. Object tables are optional IMPORTING, not TABLES.
-    CALL FUNCTION 'TR_REQUEST_CHOICE'
-      EXPORTING
-        iv_request_types   = 'K'
-        iv_title           = lv_title
-        iv_start_column    = lv_start_col
-        iv_start_row       = lv_start_row
-        iv_with_error_log  = space
-      IMPORTING
-        es_request         = ls_req
-      EXCEPTIONS
-        invalid_request      = 1
-        invalid_request_type = 2
-        user_not_owner       = 3
-        no_objects_appended  = 4
-        enqueue_error        = 5
-        cancelled_by_user    = 6
-        recursive_call       = 7
-        OTHERS               = 8.
-    lv_request = ls_req-trkorr.
-    CASE sy-subrc.
-      WHEN 0.
-        ev_request      = lv_request.
-        gv_last_request = lv_request.
-      WHEN 4.
-        "Empty object list: some releases raise NO_OBJECTS_APPENDED even
-        "when the user did pick a request. Keep the request if one came back.
-        IF lv_request IS NOT INITIAL.
-          ev_request      = lv_request.
-          gv_last_request = lv_request.
-        ELSE.
-          ev_ok    = abap_false.
-          ev_error = 'No transport request was selected; nothing written.'.
-        ENDIF.
-      WHEN 6.
-        ev_ok    = abap_false.
-        ev_error = 'Transport request selection was cancelled; nothing written.'.
-      WHEN OTHERS.
-        ev_ok    = abap_false.
-        ev_error = message_text( iv_subrc = sy-subrc
-                                 iv_default = 'Transport request selection failed' ).
-    ENDCASE.
-
-    IF ev_ok = abap_true AND ev_request IS INITIAL.
-      ev_ok    = abap_false.
-      ev_error = 'No transport request was selected; nothing written.'.
-    ENDIF.
-  ENDMETHOD.
-
   METHOD record_transport.
     ev_ok = abap_true.
     CLEAR: ev_error, ev_request.
@@ -720,38 +640,26 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    choose_request(
-      EXPORTING iv_devclass = iv_devclass
-      IMPORTING ev_ok       = ev_ok
-                ev_error    = ev_error
-                ev_request  = ev_request ).
-    IF ev_ok = abap_false.
-      RETURN.
-    ENDIF.
+    "Official CTS pair: CHECK then INSERT. TR_REQUEST_CHOICE before
+    "INSERT breaks the session ('Unerlaubte Aufrufreihenfolge der
+    "Schnittstellen der Aenderungsaufzeichnung'). INSERT itself opens
+    "the request popup when WI_ORDER is empty.
+    DATA: lt_ko200     TYPE STANDARD TABLE OF ko200,
+          ls_ko200     TYPE ko200,
+          lt_e071k     TYPE STANDARD TABLE OF e071k,
+          lv_order     TYPE e070-trkorr,
+          lv_task      TYPE e070-trkorr,
+          lv_appendable TYPE c LENGTH 1,
+          lv_pgmid     TYPE e071-pgmid,
+          lv_object    TYPE e071-object,
+          lv_obj_name  TYPE e071-obj_name.
 
-    "CTS object list (E071 / KO200): LIMU REPT = program texts,
-    "LIMU MESS = one T100 message, R3TR MSAG = whole message class.
-    "RS_CORR_INSERT with workbench class REPT/MESS is rejected with
-    "'Syntax fuer den Objektnamen ist nicht moeglich' (TK313).
-    DATA: lt_ko200    TYPE STANDARD TABLE OF ko200,
-          ls_ko200    TYPE ko200,
-          lt_e071k    TYPE STANDARD TABLE OF e071k,
-          lv_order    TYPE e070-trkorr,
-          lv_task     TYPE e070-trkorr,
-          lv_pgmid    TYPE e071-pgmid,
-          lv_object   TYPE e071-object,
-          lv_obj_name TYPE e071-obj_name.
-
-    lv_pgmid    = iv_pgmid.
+    lv_pgmid = iv_pgmid.
     IF lv_pgmid IS INITIAL.
       lv_pgmid = 'LIMU'.
     ENDIF.
     lv_object   = iv_object_class.
     lv_obj_name = iv_object.
-    lv_order    = ev_request.
-    IF lv_order IS INITIAL.
-      lv_order = gv_last_request.
-    ENDIF.
 
     CLEAR ls_ko200.
     ls_ko200-pgmid      = lv_pgmid.
@@ -762,6 +670,45 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
     ls_ko200-masterlang = iv_master_lang.
     ls_ko200-author     = sy-uname.
     APPEND ls_ko200 TO lt_ko200.
+
+    CALL FUNCTION 'TR_OBJECTS_CHECK'
+      IMPORTING
+        we_order              = lv_order
+        we_task               = lv_task
+        we_objects_appendable = lv_appendable
+      TABLES
+        wt_ko200              = lt_ko200
+        wt_e071k              = lt_e071k
+      EXCEPTIONS
+        cancel_edit_other_error = 1
+        show_only_other_error   = 2
+        OTHERS                  = 3.
+    IF sy-subrc = 1 OR sy-subrc = 2.
+      ev_ok    = abap_false.
+      ev_error = 'Transport request selection was cancelled; nothing written.'.
+      RETURN.
+    ENDIF.
+    IF sy-subrc <> 0.
+      ev_ok    = abap_false.
+      ev_error = message_text( iv_subrc = sy-subrc
+                               iv_default = |Transport check failed for { lv_pgmid } { lv_object } { lv_obj_name }| ).
+      RETURN.
+    ENDIF.
+
+    "Already locked on a request: nothing to insert, keep going.
+    IF lv_appendable IS INITIAL.
+      ev_request = COND #( WHEN lv_task IS NOT INITIAL THEN lv_task
+                           WHEN lv_order IS NOT INITIAL THEN lv_order
+                           ELSE gv_last_request ).
+      IF ev_request IS NOT INITIAL.
+        gv_last_request = ev_request.
+      ENDIF.
+      RETURN.
+    ENDIF.
+
+    IF lv_order IS INITIAL.
+      lv_order = gv_last_request.
+    ENDIF.
 
     CALL FUNCTION 'TR_OBJECTS_INSERT'
       EXPORTING
@@ -779,18 +726,17 @@ CLASS zzwn00224895_ai_texts_api IMPLEMENTATION.
     CASE sy-subrc.
       WHEN 0.
         IF lv_task IS NOT INITIAL.
-          ev_request      = lv_task.
+          ev_request = lv_task.
         ELSEIF lv_order IS NOT INITIAL.
-          ev_request      = lv_order.
+          ev_request = lv_order.
         ENDIF.
         IF ev_request IS NOT INITIAL.
           gv_last_request = ev_request.
         ENDIF.
-      WHEN 1.
+      WHEN 1 OR 2.
         ev_ok    = abap_false.
         ev_error = 'Transport request selection was cancelled; nothing written.'.
       WHEN OTHERS.
-        "Object already on the request / locked by this user: still ok.
         IF sy-msgid = 'TK' AND ( sy-msgno = '133' OR sy-msgno = '168' OR sy-msgno = '320' ).
           ev_request = COND #( WHEN lv_order IS NOT INITIAL THEN lv_order ELSE gv_last_request ).
           ev_ok      = abap_true.
